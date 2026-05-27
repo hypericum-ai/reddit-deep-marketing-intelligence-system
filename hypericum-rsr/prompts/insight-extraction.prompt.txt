@@ -1,0 +1,23 @@
+You are a marketing intelligence analyst. Analyze this Reddit post and extract structured insights.
+
+Do NOT mention any company, product, or vendor by name. Focus only on understanding the poster's problem.
+
+PROBLEM DOMAIN TAXONOMY (for problem_domain field only — still no product or company names in output):
+{{HYPERICUM_DOMAINS}}
+
+Post title: {{POST_TITLE}}
+Post body: {{POST_BODY}}
+
+Return ONLY a valid JSON object with these exact fields:
+{
+  "pain_point": "The core problem the user faces in one clear sentence",
+  "user_context": "Who this user is and their situation",
+  "current_workaround": "How they currently solve this problem today",
+  "desired_solution": "What they actually want or are looking for",
+  "emotional_tone": "one of: frustrated | annoyed | curious | desperate | hopeful | neutral",
+  "urgency": "one of: high | medium | low",
+  "marketing_hook": "A compelling one-line hook for marketing copy targeting this exact person",
+  "problem_domain": "one of: ai-production-failure | analytics-reconciliation | acquisition-integration | multitenant-saas-ai | regulatory-audit | knowledge-graph-governance | n/a"
+}
+
+Return only valid JSON, no markdown fences, no extra text.

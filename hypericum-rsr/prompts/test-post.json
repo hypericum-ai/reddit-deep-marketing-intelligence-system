@@ -1,0 +1,5 @@
+{
+  "subreddit": "hypericum_rsr_dev",
+  "title": "Eval 2026-05-27 — vendor owns our ontology, need portable classification logic",
+  "body": "We're a mid-size fintech re-evaluating our AI stack. Salesforce now effectively defines how we classify customers and products, and our internal teams can't agree on metric definitions across Snowflake and the CRM.\n\nWe need auditable classification decisions regulators can reconstruct, but we're worried about locking all semantic logic into one vendor's object model. Palantir is on the shortlist but the ontology feels like it wants to own the whole business definition layer.\n\nHas anyone solved portable, versioned entity classification that sits upstream of AI agents and BI — without moving raw client data to a third party? Looking for what actually worked in production, not another demo."
+}

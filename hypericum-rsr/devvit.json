@@ -1,0 +1,139 @@
+{
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "hypericum-rsr",
+  "post": {
+    "dir": "dist/client",
+    "entrypoints": {
+      "default": {
+        "entry": "index.html",
+        "height": "tall",
+        "inline": true
+      }
+    }
+  },
+  "server": {
+    "dir": "dist/server",
+    "entry": "index.cjs"
+  },
+  "menu": {
+    "items": [
+      {
+        "label": "RSR: Sync Dashboard",
+        "description": "Reload queue data embedded in this dashboard post, then refresh the page.",
+        "location": "post",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/sync-dashboard"
+      },
+      {
+        "label": "RSR: Dump signals to log",
+        "description": "Print all stored signals and ranked opportunities to the playtest terminal.",
+        "location": "post",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/dump-signals"
+      },
+      {
+        "label": "RSR: Create Review Dashboard",
+        "description": "Create a custom post with the live reviewer dashboard and reply redirector.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/create-dashboard"
+      },
+      {
+        "label": "RSR: Run subreddit monitor",
+        "description": "Poll configured monitor subreddits for new qualifying posts.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/run-monitor"
+      },
+      {
+        "label": "RSR: Purge stale LLM data",
+        "description": "Delete relevance=none drafts and LLM artifacts older than exportMinDraftedAt in prompts/llm-config.json.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/purge-stale-llm"
+      },
+      {
+        "label": "RSR: Check draft engagement",
+        "description": "Scan pending drafts against thread comments for posted matches.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/check-engagement"
+      }
+    ]
+  },
+  "scheduler": {
+    "tasks": {
+      "monitor-subreddits": {
+        "endpoint": "/internal/scheduler/monitor-subreddits",
+        "cron": "0 */2 * * *"
+      },
+      "check-engagement": {
+        "endpoint": "/internal/scheduler/check-engagement",
+        "cron": "0 */1 * * *"
+      }
+    }
+  },
+  "triggers": {
+    "onAppInstall": "/internal/triggers/on-app-install",
+    "onPostSubmit": "/internal/triggers/on-post-submit",
+    "onCommentSubmit": "/internal/triggers/on-comment-submit",
+    "onPostUpdate": "/internal/triggers/on-post-update"
+  },
+  "settings": {
+    "subreddit": {
+      "minIntentScore": {
+        "type": "number",
+        "label": "Minimum intent score",
+        "helpText": "Ignore content below this score (higher = stricter).",
+        "defaultValue": 30
+      },
+      "minTextLength": {
+        "type": "number",
+        "label": "Minimum text length",
+        "helpText": "Ignore content shorter than this many characters after cleanup.",
+        "defaultValue": 40
+      },
+      "enabledCategories": {
+        "type": "string",
+        "label": "Enabled categories",
+        "helpText": "Comma-separated cluster slugs, or * for all (e.g. spreadsheet-fatigue,devtools-pain).",
+        "defaultValue": "*"
+      },
+      "geminiApiKey": {
+        "type": "string",
+        "label": "Gemini API Key",
+        "helpText": "Google AI Studio key for LLM insight extraction. Leave blank to disable. Get one at aistudio.google.com.",
+        "defaultValue": ""
+      },
+      "monitorSubreddits": {
+        "type": "string",
+        "label": "Monitor subreddits",
+        "helpText": "Comma-separated subreddits to poll for new posts (e.g. MachineLearning,LocalLLaMA). Home sub is always included in the dashboard queue.",
+        "defaultValue": ""
+      },
+      "monitorKeywords": {
+        "type": "string",
+        "label": "Monitor keywords",
+        "helpText": "Optional comma-separated keywords; monitored posts must match at least one. Leave blank to accept all posts from monitor subs.",
+        "defaultValue": ""
+      }
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "permissions": {
+    "reddit": true,
+    "redis": true,
+    "http": {
+      "enable": true,
+      "domains": [
+        "generativelanguage.googleapis.com"
+      ]
+    }
+  },
+  "dev": {
+    "subreddit": "hypericum_rsr_dev"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "commentDraft": {
+    "minWords": 60,
+    "maxWords": 100
+  },
+  "thresholds": {
+    "insightIntentScore": 30,
+    "draftIntentScore": 70
+  },
+  "defaultMonitorSubreddits": [],
+  "exportMinDraftedAt": "2026-05-27T00:00:00.000Z",
+  "hypericumDomainClusters": [
+    "ai-production-failure",
+    "analytics-reconciliation",
+    "acquisition-integration",
+    "multitenant-saas-ai",
+    "regulatory-audit",
+    "knowledge-graph-governance"
+  ]
+}

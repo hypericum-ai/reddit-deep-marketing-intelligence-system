@@ -1,0 +1,46 @@
+# Secrets and local env
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Playtest / eval exports (local dumps only)
+hypericum-rsr/exports/*
+!hypericum-rsr/exports/.gitkeep
+
+# Test and tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+coverage/
+.vitest/
+.eslintcache
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local scratch / one-off dumps
+*.local.json

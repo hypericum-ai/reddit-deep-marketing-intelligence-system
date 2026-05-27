@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-viewport="desktop">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>RSR Review Dashboard</title>
+    <script src="https://webview.devvit.net/scripts/devvit.v1.min.js"></script>
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem('rsr-dash-theme');
+          if (theme === 'light' || theme === 'dark') {
+            document.documentElement.setAttribute('data-theme', theme);
+          } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+            document.documentElement.setAttribute('data-theme', 'light');
+          }
+          var viewport = localStorage.getItem('rsr-dash-viewport');
+          if (viewport === 'mobile' || viewport === 'desktop' || viewport === 'wide') {
+            document.documentElement.setAttribute('data-viewport', viewport);
+          }
+        } catch (_err) {
+          /* ignore storage errors in webview */
+        }
+      })();
+    </script>
+    <style>
+      [data-theme='dark'] {
+        color-scheme: dark;
+        --bg: #0f1419;
+        --panel: #1a2332;
+        --panel-soft: rgba(255, 255, 255, 0.03);
+        --border: #2d3a4d;
+        --text: #e7ecf3;
+        --muted: #9aa7b8;
+        --accent: #ff4500;
+        --warn: #f5a623;
+        --warn-text: #ffd27a;
+        --warn-bg: rgba(245, 166, 35, 0.15);
+        --ok: #46d369;
+        --link: #6cb6ff;
+        --shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+      }
+      [data-theme='light'] {
+        color-scheme: light;
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --panel-soft: rgba(15, 20, 25, 0.04);
+        --border: #d8dee6;
+        --text: #1a2332;
+        --muted: #5c6778;
+        --accent: #ff4500;
+        --warn: #c47d00;
+        --warn-text: #7a4e00;
+        --warn-bg: rgba(245, 166, 35, 0.18);
+        --ok: #1a7f37;
+        --link: #0969da;
+        --shadow: 0 8px 24px rgba(15, 20, 25, 0.08);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        font-family: Inter, system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        transition: background-color 0.2s ease, color 0.2s ease;
+      }
+      .wrap {
+        width: 100%;
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 20px;
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(20px, env(safe-area-inset-right));
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+        transition: max-width 0.2s ease;
+      }
+      [data-viewport='mobile'] .wrap {
+        max-width: 390px;
+        margin: 12px auto;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+      }
+      [data-viewport='wide'] .wrap {
+        max-width: min(1400px, 100%);
+      }
+      :fullscreen .wrap,
+      html.is-fullscreen .wrap {
+        max-width: 100%;
+        min-height: 100vh;
+        padding: 24px 32px;
+      }
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-bottom: 12px;
+      }
+      .header-top {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(1.15rem, 2.5vw, 1.4rem);
+        line-height: 1.2;
+      }
+      .view-controls,
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .filter-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        flex: 1 1 auto;
+      }
+      .filter-row select,
+      .filter-row .filter-chip {
+        min-height: 32px;
+        padding: 4px 8px;
+        font-size: 0.82rem;
+      }
+      .filter-row .filter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .filter-row .filter-chip input {
+        width: 14px;
+        height: 14px;
+        margin: 0;
+        accent-color: var(--accent);
+      }
+      .controls .refresh-btn {
+        min-height: 32px;
+        padding: 4px 12px;
+        font-size: 0.82rem;
+      }
+      .view-controls {
+        flex-shrink: 0;
+      }
+      select,
+      button,
+      .filter-label {
+        background: var(--panel);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 12px;
+        font: inherit;
+        min-height: 40px;
+      }
+      button {
+        cursor: pointer;
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+      }
+      button:hover {
+        border-color: var(--link);
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button.primary:hover {
+        filter: brightness(1.05);
+        border-color: var(--accent);
+      }
+      button.icon-btn {
+        min-width: 40px;
+        padding-inline: 10px;
+      }
+      button.theme-toggle {
+        width: 40px;
+        height: 40px;
+        min-height: 40px;
+        padding: 0;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      button.theme-toggle svg {
+        width: 20px;
+        height: 20px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      button.theme-toggle .moon-icon {
+        fill: currentColor;
+        stroke: none;
+      }
+      .viewport-select select,
+      .screen-select select {
+        min-width: 120px;
+        padding-right: 28px;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa7b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+      }
+      button.icon-btn[aria-pressed='true'] {
+        border-color: var(--link);
+        color: var(--link);
+      }
+      .filter-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+      .filter-label input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      #status {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin: 0 0 12px;
+      }
+      #status.err {
+        color: var(--warn);
+      }
+      #hint {
+        color: var(--muted);
+        font-size: 0.85rem;
+        margin-bottom: 16px;
+        line-height: 1.45;
+      }
+      #stats {
+        color: var(--muted);
+        margin-bottom: 16px;
+        font-size: 0.9rem;
+      }
+      #list {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      [data-viewport='wide'] #list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+        gap: 14px;
+        align-items: start;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: var(--shadow);
+      }
+      .card.redirected {
+        border-color: var(--warn);
+      }
+      .banner {
+        background: var(--warn-bg);
+        border: 1px solid var(--warn);
+        color: var(--warn-text);
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+        line-height: 1.45;
+        font-size: 0.92rem;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin-bottom: 10px;
+        line-height: 1.4;
+      }
+      .title {
+        font-size: clamp(1rem, 2vw, 1.05rem);
+        font-weight: 600;
+        margin: 0 0 8px;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+      .section-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        margin: 14px 0 6px;
+      }
+      .draft {
+        line-height: 1.5;
+        background: var(--panel-soft);
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 0.95rem;
+      }
+      .draft-text {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .draft.is-clamped .draft-text {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 4;
+        overflow: hidden;
+      }
+      .draft-toggle {
+        display: inline-block;
+        margin-top: 6px;
+        background: none;
+        border: none;
+        padding: 0;
+        color: var(--link);
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        min-height: unset;
+      }
+      .draft-toggle:hover {
+        text-decoration: underline;
+      }
+      .actions {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+      }
+      .action-btn {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        color: var(--text);
+        font: inherit;
+        font-size: 0.78rem;
+        line-height: 1.25;
+        cursor: pointer;
+        min-height: unset;
+        white-space: nowrap;
+      }
+      .action-btn:hover {
+        border-color: var(--link);
+      }
+      .thread-link.action-btn {
+        text-decoration: none;
+      }
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        border: 1px solid var(--border);
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pill.direct {
+        border-color: var(--ok);
+        color: var(--ok);
+      }
+      .pill.partial {
+        border-color: var(--link);
+        color: var(--link);
+      }
+      .pill.engagement.pending {
+        border-color: var(--muted);
+        color: var(--muted);
+      }
+      .pill.engagement.posted {
+        border-color: var(--ok);
+        color: var(--ok);
+      }
+      .pill.engagement.partial {
+        border-color: var(--link);
+        color: var(--link);
+      }
+      .empty {
+        color: var(--muted);
+        padding: 24px;
+        text-align: center;
+        line-height: 1.5;
+      }
+      a {
+        color: var(--link);
+      }
+      .thread-link {
+        background: none;
+        border: none;
+        padding: 0;
+        color: var(--link);
+        font: inherit;
+        cursor: pointer;
+        text-decoration: underline;
+        min-height: unset;
+      }
+      .banner .thread-link {
+        color: var(--warn-text);
+        font-weight: 600;
+        text-decoration: underline;
+      }
+      @media (max-width: 720px) {
+        .wrap {
+          padding: 14px;
+          padding-left: max(14px, env(safe-area-inset-left));
+          padding-right: max(14px, env(safe-area-inset-right));
+        }
+        .header-top {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .view-controls {
+          width: 100%;
+          justify-content: flex-end;
+        }
+        .controls {
+          width: 100%;
+        }
+        .filter-row {
+          flex: 1 1 auto;
+        }
+        .controls .refresh-btn {
+          min-height: 32px;
+        }
+        .card {
+          padding: 14px;
+          border-radius: 10px;
+        }
+        .meta {
+          font-size: 0.82rem;
+        }
+        [data-viewport='wide'] #list {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (min-width: 721px) {
+        .actions .action-btn {
+          font-size: 0.8rem;
+        }
+      }
+      @media (min-width: 1200px) {
+        [data-viewport='desktop'] .wrap {
+          max-width: 1040px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="header-top">
+          <h1>RSR Review Dashboard</h1>
+          <div class="view-controls" aria-label="Display options">
+            <button
+              id="themeBtn"
+              type="button"
+              class="icon-btn theme-toggle"
+              aria-label="Switch to light mode"
+              title="Toggle theme"
+            ></button>
+            <label class="screen-select">
+              <span class="sr-only">Screen size</span>
+              <select id="screenSelect" aria-label="Screen size">
+                <option value="mobile">Mobile</option>
+                <option value="desktop" selected>Desktop</option>
+                <option value="wide">Wide</option>
+                <option value="fullscreen">Full screen</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="filter-row">
+            <select id="relevance" aria-label="Relevance filter">
+              <option value="">All relevance</option>
+              <option value="direct">Direct</option>
+              <option value="partial">Partial</option>
+              <option value="none">None</option>
+            </select>
+            <label class="filter-chip">
+              <input id="excludeRedirected" type="checkbox" />
+              Hide duplicates
+            </label>
+          </div>
+          <button id="refreshBtn" type="button" class="primary refresh-btn">Refresh</button>
+        </div>
+      </header>
+      <p id="status" hidden></p>
+      <div id="hint"></div>
+      <div id="stats"></div>
+      <div id="list"></div>
+    </div>
+    <script type="module" src="./dashboard.ts"></script>
+  </body>
+</html>

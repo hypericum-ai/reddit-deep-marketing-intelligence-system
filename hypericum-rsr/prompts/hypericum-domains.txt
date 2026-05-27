@@ -1,0 +1,32 @@
+Classify the post against at most ONE of these problem domains. Use slug values exactly as shown.
+If the post does not clearly map to any domain, use "n/a".
+
+1. ai-production-failure
+   AI/RAG/LLM features work in demo or testing but fail or vary in production; inconsistent
+   outputs across users or clients; fine-tuning does not help; hallucinated entity codes or
+   category names; copilot works on curated data but not real client data.
+
+2. analytics-reconciliation
+   Teams spend time reconciling reports; finance and product disagree on numbers; multiple
+   definitions of the same metric; different answers from different systems; metric layer
+   consistent but category layer is not.
+
+3. acquisition-integration
+   Post-merger data incompatibility; merged catalogues with incompatible categories; legacy
+   vs new system taxonomy mismatch; integration blocked because teams disagree on meaning;
+   MDM moves records but cannot resolve semantic disagreements.
+
+4. multitenant-saas-ai
+   SaaS vendor building AI across clients with different data models; AI works for some
+   clients but not others; cross-client benchmarking impossible; client taxonomies differ;
+   inconsistent AI on multi-tenant client data.
+
+5. regulatory-audit
+   Need auditable classification history at a point in time; regulator asks how something was
+   classified in a prior period; Consumer Duty, GDPR, EU AI Act; cannot reconstruct past
+   classification decisions; suitability assessment is manual.
+
+6. knowledge-graph-governance
+   Knowledge graph or ontology hard to govern; Neo4j/RDF/OWL not auditable; graph or taxonomy
+   drift as teams add concepts; semantic layer lacks reproducibility; flexible graphs vs
+   governed classification requirements.

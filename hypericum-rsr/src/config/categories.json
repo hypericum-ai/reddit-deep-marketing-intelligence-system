@@ -1,0 +1,63 @@
+{
+  "categories": [
+    {
+      "slug": "ai-production-failure",
+      "keywords": [
+        "rag", "llm", "ai feature", "production", "inference",
+        "fine-tuned", "hallucinate", "inconsistent outputs",
+        "ai recommendations", "classification model", "ai copilot",
+        "language model", "generative ai", "embedding", "vector"
+      ]
+    },
+    {
+      "slug": "analytics-reconciliation",
+      "keywords": [
+        "reconciling", "single source of truth", "active customer",
+        "revenue number", "report discrepancy", "trust the data",
+        "different definitions", "bi reporting", "metric definition",
+        "data team", "dashboard", "analytics", "reporting"
+      ]
+    },
+    {
+      "slug": "acquisition-integration",
+      "keywords": [
+        "acquisition", "merger", "legacy system", "taxonomy mapping",
+        "product hierarchy", "catalogue", "harmonization", "master data",
+        "incompatible taxonomies", "category mapping", "data migration"
+      ]
+    },
+    {
+      "slug": "multitenant-saas-ai",
+      "keywords": [
+        "multi-tenant", "saas vendor", "client data", "cross-client",
+        "client onboarding", "tenant isolation", "saas ai",
+        "enterprise client", "client taxonomy", "benchmarking"
+      ]
+    },
+    {
+      "slug": "regulatory-audit",
+      "keywords": [
+        "regulator", "audit trail", "compliance", "consumer duty",
+        "gdpr", "auditable", "suitability", "classification history",
+        "prior period", "eu ai act", "fsca", "mifid", "sox"
+      ]
+    },
+    {
+      "slug": "knowledge-graph-governance",
+      "keywords": [
+        "knowledge graph", "ontology", "neo4j", "rdf", "owl",
+        "taxonomy governance", "semantic layer", "graph drift",
+        "taxonomy drift", "taxonomy inconsistency", "stardog",
+        "semantic governance", "entity classification"
+      ]
+    },
+    {
+      "slug": "manual-workflow",
+      "keywords": ["manual", "workflow", "copy paste", "copy-paste", "tedious"]
+    },
+    {
+      "slug": "integration-gaps",
+      "keywords": ["integration", "zapier", "webhook", "sync", "connector", "pipeline"]
+    }
+  ]
+}
