@@ -62,13 +62,3 @@ Prompts and thresholds are edited in `hypericum-rsr/prompts/`:
 - `hypericum-domains.txt` — problem domain taxonomy
 
 Run `npm run sync-prompts` (or any build/test) to sync into TypeScript.
-
-## Security
-
-- Never commit `.env` or API keys
-- Gemini key is stored in Devvit subreddit settings at runtime
-- Local exports in `hypericum-rsr/exports/` are gitignored
-
-## License
-
-BSD-3-Clause — see [hypericum-rsr/LICENSE](./hypericum-rsr/LICENSE).
