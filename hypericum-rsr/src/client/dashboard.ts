@@ -32,6 +32,22 @@ type DashboardPostData = {
   items: QueueItem[];
 };
 
+type SearchHit = {
+  contentId: string;
+  subreddit: string;
+  title?: string;
+  intentScore: number;
+  clusters: string[];
+  hypericumDomain?: string;
+  painPoint?: string;
+  draftPreview?: string;
+  relevance?: string;
+  queueStatus: 'active' | 'redirected';
+  permalink?: string;
+  matchScore: number;
+  matchReason: string;
+};
+
 type DevvitClientGlobal = typeof globalThis & {
   devvit?: {
     token?: string;
@@ -93,7 +109,24 @@ const state = {
   fullscreen: false,
   bootstrapped: false,
   expandedDrafts: new Set<string>(),
+  regenerating: new Set<string>(),
+  regenTargetId: null as string | null,
+  searchBusy: false,
+  searchResults: [] as SearchHit[],
+  searchAttempted: false,
+  lastSearchQuery: '',
 };
+
+const HYPERICUM_DOMAIN_SUGGESTIONS = [
+  'ai-production-failure',
+  'analytics-reconciliation',
+  'acquisition-integration',
+  'multitenant-saas-ai',
+  'regulatory-audit',
+  'knowledge-graph-governance',
+];
+
+const SEARCH_FETCH_TIMEOUT_MS = 8000;
 
 function escapeHtml(value: string): string {
   return value
@@ -101,6 +134,386 @@ function escapeHtml(value: string): string {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+function threadUrlForHit(hit: SearchHit): string {
+  const item = state.items.find((entry) => entry.signal.contentId === hit.contentId);
+  if (item) {
+    return threadUrl(item);
+  }
+
+  if (hit.permalink) {
+    return hit.permalink.startsWith('http')
+      ? hit.permalink
+      : `https://www.reddit.com${hit.permalink}`;
+  }
+
+  const bareId = hit.contentId.startsWith('t3_') ? hit.contentId.slice(3) : hit.contentId;
+  return `https://www.reddit.com/r/${hit.subreddit}/comments/${bareId}/`;
+}
+
+function tokenizeSearchText(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length > 1);
+}
+
+function searchTextForItem(item: QueueItem): string {
+  return [
+    item.signal.title,
+    item.signal.clusters.join(' '),
+    item.insight?.painPoint,
+    item.insight?.emotionalTone,
+    item.commentDraft?.draft,
+    item.commentDraft?.relevance,
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase();
+}
+
+function suggestQueryForItem(item: QueueItem): string {
+  const title = item.signal.title?.trim();
+  if (title) {
+    return title.replace(/^Eval\s+\d{4}-\d{2}-\d{2}\s*[—-]\s*/i, '').slice(0, 80);
+  }
+  return item.signal.clusters[0]?.replaceAll('-', ' ') ?? item.signal.contentId;
+}
+
+function scoreLocalItem(item: QueueItem, query: string): number {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return 0;
+  }
+
+  const document = searchTextForItem(item);
+  if (document.includes(normalizedQuery)) {
+    return 0.95;
+  }
+
+  const queryTokens = tokenizeSearchText(normalizedQuery);
+  const docTokens = new Set(tokenizeSearchText(document));
+  if (queryTokens.length === 0) {
+    return 0;
+  }
+
+  const overlap = queryTokens.filter((token) => docTokens.has(token)).length;
+  if (overlap === 0) {
+    return 0;
+  }
+
+  return overlap / queryTokens.length;
+}
+
+function itemToSearchHit(item: QueueItem, matchScore: number, matchReason: string): SearchHit {
+  return {
+    contentId: item.signal.contentId,
+    subreddit: item.signal.subreddit,
+    ...(item.signal.title !== undefined ? { title: item.signal.title } : {}),
+    intentScore: item.signal.intent.score,
+    clusters: item.signal.clusters,
+    ...(item.insight?.painPoint ? { painPoint: item.insight.painPoint } : {}),
+    ...(item.commentDraft?.draft
+      ? { draftPreview: item.commentDraft.draft.slice(0, 180) }
+      : {}),
+    ...(item.commentDraft?.relevance ? { relevance: item.commentDraft.relevance } : {}),
+    queueStatus: item.queueStatus,
+    ...(item.replyUrl && item.replyUrl !== '#'
+      ? { permalink: item.replyUrl.replace(/^https:\/\/(www\.)?reddit\.com/, '') }
+      : {}),
+    matchScore,
+    matchReason,
+  };
+}
+
+function searchLocalQueue(query: string, limit = 20): SearchHit[] {
+  return state.items
+    .map((item) => {
+      const score = scoreLocalItem(item, query);
+      if (score <= 0) {
+        return undefined;
+      }
+      return itemToSearchHit(item, score, score >= 0.9 ? 'queue phrase match' : 'queue keyword match');
+    })
+    .filter((hit): hit is SearchHit => hit !== undefined)
+    .sort((a, b) => b.matchScore - a.matchScore || b.intentScore - a.intentScore)
+    .slice(0, limit);
+}
+
+function uniqueSuggestionQueries(): string[] {
+  const queries = new Set<string>();
+  for (const item of state.items) {
+    queries.add(suggestQueryForItem(item));
+    for (const cluster of item.signal.clusters) {
+      queries.add(cluster.replaceAll('-', ' '));
+    }
+  }
+  return [...queries].slice(0, 8);
+}
+
+function renderSuggestionChip(label: string, query: string): string {
+  return `<button type="button" class="search-suggestion-chip" data-search-suggest-query="${escapeHtml(query)}">${escapeHtml(label)}</button>`;
+}
+
+function renderBrowseQueueRow(item: QueueItem): string {
+  const title = item.signal.title || item.signal.contentId;
+  const meta = [
+    `score ${item.signal.intent.score}`,
+    item.signal.clusters.join(', ') || 'no cluster',
+    item.commentDraft?.relevance ?? 'no draft',
+  ].join(' · ');
+
+  return `<article class="search-browse-row">
+    <div>
+      <div class="search-browse-title">${escapeHtml(title)}</div>
+      <div class="search-result-meta">${escapeHtml(meta)}</div>
+    </div>
+    <div class="search-browse-actions">
+      <button type="button" class="action-btn" data-search-suggest-query="${escapeHtml(suggestQueryForItem(item))}">Search similar</button>
+      <button type="button" class="action-btn" data-browse-queue-item="${escapeHtml(item.signal.contentId)}">Open in queue</button>
+    </div>
+  </article>`;
+}
+
+function renderSearchSuggestionsPanel(options: {
+  query?: string;
+  emptyResult?: boolean;
+} = {}): string {
+  const queueItems = state.items.slice(0, 6);
+  const topicChips = uniqueSuggestionQueries();
+  const domainChips = HYPERICUM_DOMAIN_SUGGESTIONS.map((slug) =>
+    renderSuggestionChip(slug.replaceAll('-', ' '), slug)
+  );
+
+  const intro = options.emptyResult && options.query
+    ? `<p class="search-empty-title">No matches for “${escapeHtml(options.query)}”.</p>
+       <p class="search-empty">Try a broader term or pick an existing post below.</p>`
+    : `<p class="search-empty">Search stored signals, or start from an existing post in the queue.</p>`;
+
+  const topicSection =
+    topicChips.length > 0
+      ? `<div class="search-section-label">From current queue</div>
+         <div class="search-suggestion-row">${topicChips
+           .map((query) => renderSuggestionChip(query, query))
+           .join('')}</div>`
+      : '';
+
+  const domainSection = `<div class="search-section-label">Hypericum domains</div>
+    <div class="search-suggestion-row">${domainChips.join('')}</div>`;
+
+  const browseSection =
+    queueItems.length > 0
+      ? `<div class="search-section-label">Browse existing threads</div>
+         <div class="search-browse-list">${queueItems.map(renderBrowseQueueRow).join('')}</div>`
+      : `<div class="search-empty">Queue is empty — post a qualifying thread, then Refresh.</div>`;
+
+  return `<div class="search-suggestions-panel">
+    ${intro}
+    ${topicSection}
+    ${domainSection}
+    ${browseSection}
+  </div>`;
+}
+
+function openSearchModal(): void {
+  const modal = document.getElementById('searchModal');
+  const input = document.getElementById('searchInput') as HTMLInputElement | null;
+  state.searchResults = [];
+  state.searchAttempted = false;
+  state.lastSearchQuery = '';
+  renderSearchResults();
+  modal?.removeAttribute('hidden');
+  input?.focus();
+}
+
+function closeSearchModal(): void {
+  document.getElementById('searchModal')?.setAttribute('hidden', '');
+}
+
+function setSearchBusy(busy: boolean): void {
+  state.searchBusy = busy;
+  const submit = document.getElementById('searchSubmit') as HTMLButtonElement | null;
+  if (submit) {
+    submit.disabled = busy;
+    submit.textContent = busy ? 'Searching…' : 'Search';
+  }
+}
+
+function renderSearchResult(hit: SearchHit): string {
+  const title = hit.title || hit.contentId;
+  const snippet = hit.painPoint || hit.draftPreview || hit.clusters.join(', ');
+  const matchPct = Math.round(hit.matchScore * 100);
+  const relevance = hit.relevance
+    ? `<span class="pill ${escapeHtml(hit.relevance)}">${escapeHtml(hit.relevance)}</span>`
+    : '';
+
+  return `<article class="search-result" data-search-result="${escapeHtml(hit.contentId)}">
+    <div class="search-result-head">
+      <h4 class="search-result-title">${escapeHtml(title)}</h4>
+      <button type="button" class="action-btn" data-open-search-hit="${escapeHtml(hit.contentId)}">Open thread</button>
+    </div>
+    <div class="search-result-meta">
+      r/${escapeHtml(hit.subreddit)}
+      · score ${hit.intentScore}
+      · ${matchPct}% match (${escapeHtml(hit.matchReason)})
+      ${hit.hypericumDomain ? ` · ${escapeHtml(hit.hypericumDomain)}` : ''}
+      ${relevance}
+      ${hit.queueStatus === 'redirected' ? ' · duplicate' : ''}
+    </div>
+    <p class="search-result-snippet">${escapeHtml(snippet)}</p>
+  </article>`;
+}
+
+function renderSearchResults(): void {
+  const container = document.getElementById('searchResults');
+  if (!container) {
+    return;
+  }
+
+  if (state.searchBusy) {
+    container.innerHTML = '<div class="search-empty">Searching stored signals…</div>';
+    return;
+  }
+
+  if (state.searchResults.length > 0) {
+    container.innerHTML = state.searchResults.map(renderSearchResult).join('');
+    return;
+  }
+
+  if (state.searchAttempted) {
+    container.innerHTML = renderSearchSuggestionsPanel({
+      query: state.lastSearchQuery,
+      emptyResult: true,
+    });
+    return;
+  }
+
+  container.innerHTML = renderSearchSuggestionsPanel();
+}
+
+function mergeSearchHits(apiHits: SearchHit[], localHits: SearchHit[]): SearchHit[] {
+  const byId = new Map<string, SearchHit>();
+  for (const hit of [...apiHits, ...localHits]) {
+    const existing = byId.get(hit.contentId);
+    if (!existing || hit.matchScore > existing.matchScore) {
+      byId.set(hit.contentId, hit);
+    }
+  }
+  return [...byId.values()]
+    .sort((a, b) => b.matchScore - a.matchScore || b.intentScore - a.intentScore)
+    .slice(0, 20);
+}
+
+async function fetchSearchResults(query: string): Promise<SearchHit[]> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), SEARCH_FETCH_TIMEOUT_MS);
+
+  try {
+    const params = new URLSearchParams({
+      subreddit: state.subreddit,
+      q: query,
+      limit: '20',
+    });
+    const res = await fetch(`/api/search-signals?${params.toString()}`, {
+      signal: controller.signal,
+    });
+    const payload = (await res.json()) as {
+      error?: string;
+      results?: SearchHit[];
+    };
+
+    if (!res.ok) {
+      throw new Error(payload.error ?? `Search failed (${res.status})`);
+    }
+
+    return payload.results ?? [];
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+function applySearchQuery(query: string, runSearch = true): void {
+  const input = document.getElementById('searchInput') as HTMLInputElement | null;
+  if (input) {
+    input.value = query;
+  }
+  if (runSearch) {
+    void submitSearch();
+  }
+}
+
+async function submitSearch(): Promise<void> {
+  const input = document.getElementById('searchInput') as HTMLInputElement | null;
+  const query = input?.value.trim() ?? '';
+  if (!query) {
+    showToast('Enter a search query', false);
+    return;
+  }
+
+  state.lastSearchQuery = query;
+  state.searchAttempted = true;
+  setSearchBusy(true);
+  renderSearchResults();
+
+  try {
+    let apiHits: SearchHit[] = [];
+    try {
+      apiHits = await fetchSearchResults(query);
+    } catch {
+      apiHits = [];
+    }
+
+    const localHits = searchLocalQueue(query);
+    state.searchResults = mergeSearchHits(apiHits, localHits);
+    renderSearchResults();
+
+    if (state.searchResults.length === 0) {
+      showToast('No matches — try a suggestion below', false);
+    }
+  } catch (err) {
+    state.searchResults = searchLocalQueue(query);
+    renderSearchResults();
+    if (state.searchResults.length === 0) {
+      const message = err instanceof Error ? err.message : 'Search failed';
+      showToast(message.slice(0, 120), false);
+    }
+  } finally {
+    setSearchBusy(false);
+    renderSearchResults();
+  }
+}
+
+function focusQueueItem(contentId: string): void {
+  const card = document.querySelector(`[data-queue-item="${contentId}"]`);
+  if (card instanceof HTMLElement) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('search-highlight');
+    window.setTimeout(() => {
+      card.classList.remove('search-highlight');
+    }, 1800);
+    closeSearchModal();
+    return;
+  }
+
+  const hit = state.searchResults.find((entry) => entry.contentId === contentId);
+  if (hit) {
+    openThread(threadUrlForHit(hit));
+  }
+}
+
+function openSearchHit(contentId: string): void {
+  const inQueue = state.items.some((entry) => entry.signal.contentId === contentId);
+  if (inQueue) {
+    focusQueueItem(contentId);
+    return;
+  }
+
+  const hit = state.searchResults.find((entry) => entry.contentId === contentId);
+  if (hit) {
+    openThread(threadUrlForHit(hit));
+  }
 }
 
 function threadUrl(item: QueueItem): string {
@@ -206,6 +619,94 @@ async function copyDraft(contentId: string): Promise<void> {
   }
 }
 
+function openRegenModal(contentId: string): void {
+  state.regenTargetId = contentId;
+  const modal = document.getElementById('regenModal');
+  const textarea = document.getElementById('regenContext') as HTMLTextAreaElement | null;
+  if (textarea) {
+    textarea.value = '';
+  }
+  modal?.removeAttribute('hidden');
+  textarea?.focus();
+}
+
+function closeRegenModal(): void {
+  state.regenTargetId = null;
+  document.getElementById('regenModal')?.setAttribute('hidden', '');
+}
+
+function setRegenBusy(busy: boolean): void {
+  const confirm = document.getElementById('regenConfirm') as HTMLButtonElement | null;
+  const cancel = document.getElementById('regenCancel') as HTMLButtonElement | null;
+  if (confirm) {
+    confirm.disabled = busy;
+    confirm.textContent = busy ? 'Regenerating…' : 'Regenerate';
+  }
+  if (cancel) {
+    cancel.disabled = busy;
+  }
+}
+
+async function submitRegenerate(): Promise<void> {
+  const contentId = state.regenTargetId;
+  if (!contentId) {
+    return;
+  }
+
+  const textarea = document.getElementById('regenContext') as HTMLTextAreaElement | null;
+  const additionalContext = textarea?.value.trim() ?? '';
+
+  state.regenerating.add(contentId);
+  setRegenBusy(true);
+  renderList();
+  setStatus('Regenerating draft…');
+
+  try {
+    const res = await fetch('/api/regenerate-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contentId,
+        ...(additionalContext ? { additionalContext } : {}),
+      }),
+    });
+
+    const payload = (await res.json()) as {
+      error?: string;
+      commentDraft?: QueueItem['commentDraft'];
+    };
+
+    if (!res.ok) {
+      throw new Error(payload.error ?? `Request failed (${res.status})`);
+    }
+
+    if (!payload.commentDraft) {
+      throw new Error('No draft returned');
+    }
+
+    const index = state.items.findIndex((entry) => entry.signal.contentId === contentId);
+    if (index >= 0) {
+      state.items[index] = {
+        ...state.items[index]!,
+        commentDraft: payload.commentDraft,
+      };
+    }
+
+    state.expandedDrafts.add(contentId);
+    closeRegenModal();
+    setStatus('');
+    showToast('Draft regenerated');
+  } catch (err) {
+    setStatus('');
+    const message = err instanceof Error ? err.message : 'Regeneration failed';
+    showToast(message.slice(0, 120), false);
+  } finally {
+    state.regenerating.delete(contentId);
+    setRegenBusy(false);
+    renderList();
+  }
+}
+
 function draftNeedsPreview(text: string): boolean {
   return (
     text.length > DRAFT_PREVIEW_MIN_CHARS ||
@@ -286,7 +787,12 @@ function renderItem(item: QueueItem): string {
     ? `<button type="button" class="action-btn" data-copy-draft="${escapeHtml(item.signal.contentId)}">Copy draft</button>`
     : '';
 
-  return `<article class="card ${redirected ? 'redirected' : ''}">
+  const regenBusy = state.regenerating.has(item.signal.contentId);
+  const regenBtn = item.commentDraft
+    ? `<button type="button" class="action-btn${regenBusy ? ' is-busy' : ''}" data-regen-draft="${escapeHtml(item.signal.contentId)}"${regenBusy ? ' disabled' : ''}>${regenBusy ? 'Regenerating…' : 'Regenerate draft'}</button>`
+    : '';
+
+  return `<article class="card ${redirected ? 'redirected' : ''}" data-queue-item="${escapeHtml(item.signal.contentId)}">
     ${banner}
     <div class="meta">
       r/${escapeHtml(signal.subreddit)}
@@ -301,6 +807,7 @@ function renderItem(item: QueueItem): string {
     <div class="actions">
       ${threadLink('Open thread', url)}
       ${copyBtn}
+      ${regenBtn}
     </div>
   </article>`;
 }
@@ -601,6 +1108,72 @@ function bindControls(): void {
     void onRefresh();
   });
 
+  document.getElementById('searchBtn')?.addEventListener('click', () => {
+    openSearchModal();
+  });
+  document.getElementById('searchClose')?.addEventListener('click', () => {
+    closeSearchModal();
+  });
+  document.getElementById('searchSubmit')?.addEventListener('click', () => {
+    void submitSearch();
+  });
+  document.getElementById('searchInput')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void submitSearch();
+    }
+  });
+  document.getElementById('searchModal')?.addEventListener('click', (event) => {
+    if (event.target === event.currentTarget) {
+      closeSearchModal();
+    }
+  });
+  document.getElementById('searchResults')?.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement;
+
+    const suggestBtn = target.closest('[data-search-suggest-query]') as HTMLElement | null;
+    if (suggestBtn) {
+      event.preventDefault();
+      const query = suggestBtn.getAttribute('data-search-suggest-query');
+      if (query) {
+        applySearchQuery(query);
+      }
+      return;
+    }
+
+    const browseBtn = target.closest('[data-browse-queue-item]') as HTMLElement | null;
+    if (browseBtn) {
+      event.preventDefault();
+      const contentId = browseBtn.getAttribute('data-browse-queue-item');
+      if (contentId) {
+        openSearchHit(contentId);
+      }
+      return;
+    }
+
+    const openBtn = target.closest('[data-open-search-hit]') as HTMLElement | null;
+    if (!openBtn) {
+      return;
+    }
+    event.preventDefault();
+    const contentId = openBtn.getAttribute('data-open-search-hit');
+    if (contentId) {
+      openSearchHit(contentId);
+    }
+  });
+
+  document.getElementById('regenCancel')?.addEventListener('click', () => {
+    closeRegenModal();
+  });
+  document.getElementById('regenConfirm')?.addEventListener('click', () => {
+    void submitRegenerate();
+  });
+  document.getElementById('regenModal')?.addEventListener('click', (event) => {
+    if (event.target === event.currentTarget) {
+      closeRegenModal();
+    }
+  });
+
   list?.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
 
@@ -630,6 +1203,16 @@ function bindControls(): void {
       const contentId = copyButton.getAttribute('data-copy-draft');
       if (contentId) {
         void copyDraft(contentId);
+      }
+      return;
+    }
+
+    const regenButton = target.closest('[data-regen-draft]') as HTMLElement | null;
+    if (regenButton) {
+      event.preventDefault();
+      const contentId = regenButton.getAttribute('data-regen-draft');
+      if (contentId && !state.regenerating.has(contentId)) {
+        openRegenModal(contentId);
       }
       return;
     }

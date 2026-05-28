@@ -93,3 +93,21 @@ export async function listSignals(
 
   return signals;
 }
+
+export async function deleteSignal(
+  contentId: string,
+  subreddit?: string
+): Promise<void> {
+  await redis.del(signalKey(contentId));
+  await redis.zRem(RECENT_INDEX, [contentId]);
+  if (subreddit) {
+    await redis.zRem(subredditIndexKey(subreddit), [contentId]);
+  }
+}
+
+export async function clearSignalIndexes(subreddits: string[]): Promise<void> {
+  await redis.del(RECENT_INDEX);
+  for (const subreddit of subreddits) {
+    await redis.del(subredditIndexKey(subreddit));
+  }
+}

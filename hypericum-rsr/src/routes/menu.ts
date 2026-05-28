@@ -23,6 +23,7 @@ import { runProactiveSubredditMonitor } from '../core/proactiveSearch.js';
 import { scanDraftEngagementForSubreddit } from '../core/engagementScan.js';
 import { filterSignalsForExport } from '../core/exportFilter.js';
 import { purgeStaleLlmData } from '../core/purgeStaleLlm.js';
+import { resetDevSubreddit } from '../core/resetDevSubreddit.js';
 import { EXPORT_MIN_DRAFTED_AT_MS } from '../generated/llmPrompts.js';
 import { loadMonitorSettings } from '../server/monitorSettings.js';
 import {
@@ -453,6 +454,50 @@ menu.post('/purge-stale-llm', async (c) => {
     return c.json({
       showToast: {
         text: `Purge failed: ${formatError(err).slice(0, 100)}`,
+        appearance: 'neutral',
+      },
+    });
+  }
+});
+
+menu.post('/reset-dev-subreddit', async (c) => {
+  let body: MenuItemRequest;
+  try {
+    body = await c.req.json<MenuItemRequest>();
+  } catch (e) {
+    console.error('RSR: failed to parse reset-dev-subreddit request', e);
+    return c.json({
+      showToast: { text: 'Invalid reset request', appearance: 'neutral' },
+    });
+  }
+
+  try {
+    const subredditInfo = await reddit.getSubredditInfoById(
+      body.targetId as `t5_${string}`
+    );
+    if (!subredditInfo.name) {
+      return c.json({
+        showToast: { text: 'Subreddit not found', appearance: 'neutral' },
+      });
+    }
+
+    const result = await resetDevSubreddit(subredditInfo.name);
+    const toastText =
+      `Reset r/${result.subredditName}: removed ${result.removedPosts} post(s), ` +
+      `cleared ${result.deletedSignals} queue signal(s)` +
+      (result.removeErrors > 0 ? ` (${result.removeErrors} remove error(s))` : '');
+
+    return c.json({
+      showToast: {
+        text: toastText,
+        appearance: result.removeErrors > 0 ? 'neutral' : 'success',
+      },
+    });
+  } catch (err) {
+    console.error('RSR: reset-dev-subreddit failed', err);
+    return c.json({
+      showToast: {
+        text: `Reset failed: ${formatError(err).slice(0, 120)}`,
         appearance: 'neutral',
       },
     });

@@ -41,3 +41,32 @@ export async function generateCommentDraft(
 
   return draft;
 }
+
+export type RegenerateCommentDraftOptions = {
+  additionalContext?: string;
+  previousDraft?: string;
+};
+
+/** Reviewer-triggered regeneration; skips automatic off-domain gate. */
+export async function regenerateCommentDraft(
+  signal: Signal,
+  insight: LLMInsight,
+  apiKey: string,
+  options: RegenerateCommentDraftOptions = {}
+): Promise<CommentDraft> {
+  const draft = await draftComment(signal, insight, apiKey, {
+    ...(options.additionalContext
+      ? { additionalContext: options.additionalContext }
+      : {}),
+    ...(options.previousDraft ? { previousDraft: options.previousDraft } : {}),
+  });
+
+  if (!shouldPersistDraft(draft)) {
+    throw new DraftNotApplicableError(
+      `Regenerated draft for ${signal.contentId} was relevance=none`,
+      'relevance_none'
+    );
+  }
+
+  return draft;
+}

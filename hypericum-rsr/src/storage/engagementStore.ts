@@ -67,6 +67,10 @@ export async function listPendingEngagementIds(
   return rows.map((row) => row.member);
 }
 
+export async function clearPendingEngagementIndex(): Promise<void> {
+  await redis.del(PENDING_INDEX);
+}
+
 export async function clearEngagementRecord(contentId: string): Promise<void> {
   await redis.del(engagementKey(contentId));
   await redis.zRem(PENDING_INDEX, [contentId]);

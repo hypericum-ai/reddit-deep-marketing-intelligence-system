@@ -1,22 +1,29 @@
 import { Hono } from 'hono';
+import { settings } from '@devvit/web/server';
 
 import { aggregateSignals } from '../core/aggregateSignals.js';
 import { rankOpportunities } from '../core/rankOpportunities.js';
 import { buildReviewerQueue } from '../core/reviewerQueue.js';
-import { getDrafts } from '../storage/commentDraftStore.js';
-import { getEngagements } from '../storage/engagementStore.js';
-import { getInsights } from '../storage/insightStore.js';
-import { listSignals } from '../storage/redisSignalStore.js';
+import {
+  DraftNotApplicableError,
+  regenerateCommentDraft,
+} from '../core/commentDraftPipeline.js';
+import { initDraftEngagement } from '../core/draftEngagement.js';
 import {
   sanitizeDraftText,
   sanitizePostingGuidance,
 } from '../core/llmCommentDraft.js';
+import { getDraft, getDrafts, saveDraft } from '../storage/commentDraftStore.js';
+import { getEngagements } from '../storage/engagementStore.js';
+import { getInsight, getInsights } from '../storage/insightStore.js';
+import { getSignal, listSignals } from '../storage/redisSignalStore.js';
 import {
   listSignalsForQueue,
   loadReviewerQueueForSubreddit,
   queueContentIds,
 } from '../server/loadReviewerQueue.js';
 import { loadSubredditConfig } from '../storage/subredditConfig.js';
+import { searchStoredSignals } from '../core/searchSignals.js';
 import { renderDashboardPage } from './dashboardPage.js';
 
 export const api = new Hono();
@@ -58,6 +65,103 @@ async function loadSignalBundle(subreddit: string | undefined, limit: number) {
   );
   return { signals, draftMap, insightMap, engagementMap };
 }
+
+function parseAdditionalContext(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.slice(0, 2000);
+}
+
+api.post('/regenerate-draft', async (c) => {
+  let body: { contentId?: string; additionalContext?: string };
+  try {
+    body = await c.req.json<{ contentId?: string; additionalContext?: string }>();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const contentId = body.contentId?.trim();
+  if (!contentId) {
+    return c.json({ error: 'contentId is required' }, 400);
+  }
+
+  const apiKey = (await settings.get<string>('geminiApiKey').catch(() => '')) ?? '';
+  if (!apiKey) {
+    return c.json({ error: 'Gemini API key is not configured in subreddit settings' }, 503);
+  }
+
+  const signal = await getSignal(contentId);
+  if (!signal) {
+    return c.json({ error: `Signal not found: ${contentId}` }, 404);
+  }
+
+  const insight = await getInsight(contentId);
+  if (!insight) {
+    return c.json(
+      { error: 'Insight not found — wait for insight extraction before regenerating' },
+      404
+    );
+  }
+
+  const previousDraft = await getDraft(contentId);
+  const additionalContext = parseAdditionalContext(body.additionalContext);
+
+  try {
+    const draft = await regenerateCommentDraft(signal, insight, apiKey, {
+      ...(additionalContext ? { additionalContext } : {}),
+      ...(previousDraft?.draft ? { previousDraft: previousDraft.draft } : {}),
+    });
+    await saveDraft(draft);
+    await initDraftEngagement(contentId);
+
+    return c.json({
+      contentId,
+      commentDraft: {
+        draft: sanitizeDraftText(draft.draft),
+        relevance: draft.relevance,
+        postingGuidance: sanitizePostingGuidance(draft.postingGuidance),
+      },
+    });
+  } catch (err) {
+    if (err instanceof DraftNotApplicableError) {
+      return c.json({ error: err.message }, 422);
+    }
+    console.error(`RSR regenerate-draft failed for ${contentId}:`, err);
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message.slice(0, 200) }, 500);
+  }
+});
+
+api.get('/search-signals', async (c) => {
+  const subreddit = c.req.query('subreddit') ?? undefined;
+  const query = c.req.query('q')?.trim() ?? '';
+  const limit = parseLimit(c.req.query('limit') ?? '20');
+
+  if (!query) {
+    return c.json({ error: 'q query param is required' }, 400);
+  }
+
+  if (query.length > 500) {
+    return c.json({ error: 'Search query is too long (max 500 characters)' }, 400);
+  }
+
+  const { signals, draftMap, insightMap } = await loadSignalBundle(subreddit, 500);
+  const results = searchStoredSignals(signals, insightMap, draftMap, query, {
+    limit: Math.min(limit, 50),
+  });
+
+  return c.json({
+    query,
+    subreddit: subreddit ?? null,
+    total: results.length,
+    results,
+  });
+});
 
 api.get('/signals', async (c) => {
   const subreddit = c.req.query('subreddit');

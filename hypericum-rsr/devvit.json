@@ -53,6 +53,13 @@
         "endpoint": "/internal/menu/purge-stale-llm"
       },
       {
+        "label": "RSR: Reset dev subreddit",
+        "description": "DEV ONLY (hypericum_rsr_dev): remove your posts + dashboard posts and wipe the entire Redis queue.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/reset-dev-subreddit"
+      },
+      {
         "label": "RSR: Check draft engagement",
         "description": "Scan pending drafts against thread comments for posted matches.",
         "location": "subreddit",

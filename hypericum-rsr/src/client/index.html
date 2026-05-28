@@ -154,6 +154,31 @@
         padding: 4px 12px;
         font-size: 0.82rem;
       }
+      .toolbar-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+      button.search-btn {
+        width: 32px;
+        height: 32px;
+        min-height: 32px;
+        padding: 0;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      button.search-btn svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
       .view-controls {
         flex-shrink: 0;
       }
@@ -417,6 +442,190 @@
         text-align: center;
         line-height: 1.5;
       }
+      .regen-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.55);
+      }
+      .regen-modal[hidden] {
+        display: none;
+      }
+      .regen-dialog {
+        width: min(480px, 100%);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: var(--shadow);
+      }
+      .regen-dialog h3 {
+        margin: 0 0 8px;
+        font-size: 1rem;
+      }
+      .regen-hint {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.45;
+      }
+      .regen-dialog textarea {
+        width: 100%;
+        min-height: 96px;
+        resize: vertical;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font: inherit;
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+      .regen-dialog input[type='search'] {
+        width: 100%;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font: inherit;
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+      .regen-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .regen-actions button {
+        min-height: 36px;
+      }
+      .search-results {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: min(52vh, 420px);
+        overflow: auto;
+        margin-top: 12px;
+      }
+      .search-result {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: var(--panel-soft);
+      }
+      .search-result-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+      }
+      .search-result-title {
+        margin: 0;
+        font-size: 0.92rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+      .search-result-meta {
+        color: var(--muted);
+        font-size: 0.78rem;
+        line-height: 1.4;
+      }
+      .search-result-snippet {
+        margin: 6px 0 0;
+        font-size: 0.84rem;
+        line-height: 1.45;
+        color: var(--text);
+        overflow-wrap: anywhere;
+      }
+      .search-empty {
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.45;
+        margin-top: 12px;
+      }
+      .search-empty-title {
+        margin: 0 0 6px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .search-suggestions-panel {
+        margin-top: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .search-section-label {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .search-suggestion-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .search-suggestion-chip {
+        background: var(--panel-soft);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 4px 10px;
+        color: var(--text);
+        font: inherit;
+        font-size: 0.78rem;
+        cursor: pointer;
+        min-height: unset;
+      }
+      .search-suggestion-chip:hover {
+        border-color: var(--link);
+        color: var(--link);
+      }
+      .search-browse-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .search-browse-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: flex-start;
+        justify-content: space-between;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: var(--panel-soft);
+      }
+      .search-browse-title {
+        font-size: 0.88rem;
+        font-weight: 600;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+      .search-browse-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .action-btn.is-busy {
+        opacity: 0.65;
+        pointer-events: none;
+      }
+      .card.search-highlight {
+        outline: 2px solid var(--link);
+        outline-offset: 2px;
+      }
       a {
         color: var(--link);
       }
@@ -518,13 +727,64 @@
               Hide duplicates
             </label>
           </div>
-          <button id="refreshBtn" type="button" class="primary refresh-btn">Refresh</button>
+          <div class="toolbar-actions">
+            <button
+              id="searchBtn"
+              type="button"
+              class="search-btn"
+              aria-label="Search previous and similar posts"
+              title="Search posts"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="M20 20l-3.5-3.5"></path>
+              </svg>
+            </button>
+            <button id="refreshBtn" type="button" class="primary refresh-btn">Refresh</button>
+          </div>
         </div>
       </header>
       <p id="status" hidden></p>
       <div id="hint"></div>
       <div id="stats"></div>
       <div id="list"></div>
+    </div>
+    <div id="searchModal" class="regen-modal" hidden>
+      <div class="regen-dialog search-dialog" role="dialog" aria-modal="true" aria-labelledby="searchTitle">
+        <h3 id="searchTitle">Search posts</h3>
+        <p class="regen-hint">
+          Find previous or similar threads by keywords, pain point, cluster, or Hypericum domain slug.
+        </p>
+        <input
+          id="searchInput"
+          type="search"
+          maxlength="500"
+          placeholder="e.g. RAG production, regulatory audit, ontology drift"
+        />
+        <div id="searchResults" class="search-results"></div>
+        <div class="regen-actions">
+          <button id="searchClose" type="button">Close</button>
+          <button id="searchSubmit" type="button" class="primary">Search</button>
+        </div>
+      </div>
+    </div>
+    <div id="regenModal" class="regen-modal" hidden>
+      <div class="regen-dialog" role="dialog" aria-modal="true" aria-labelledby="regenTitle">
+        <h3 id="regenTitle">Regenerate draft</h3>
+        <p class="regen-hint">
+          Optional notes for the team — tone, angle, what to emphasize, or what to avoid.
+          Leave blank to regenerate from the existing thread and insight only.
+        </p>
+        <textarea
+          id="regenContext"
+          maxlength="2000"
+          placeholder="e.g. Lead with portable classification; keep Hypericum mention subtle."
+        ></textarea>
+        <div class="regen-actions">
+          <button id="regenCancel" type="button">Cancel</button>
+          <button id="regenConfirm" type="button" class="primary">Regenerate</button>
+        </div>
+      </div>
     </div>
     <script type="module" src="./dashboard.ts"></script>
   </body>

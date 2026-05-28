@@ -54,4 +54,14 @@ describe('synced LLM prompts', () => {
     expect(prompt).toContain('ai-production-failure');
     expect(prompt).toContain('RAG fails in prod');
   });
+
+  it('includes reviewer regeneration context in comment draft prompt', () => {
+    const prompt = buildCommentDraftPrompt(signal, insight, {
+      previousDraft: 'Old draft text here.',
+      additionalContext: 'Emphasize portable ontology.',
+    });
+    expect(prompt).toContain('REVIEWER REGENERATION REQUEST');
+    expect(prompt).toContain('Old draft text here.');
+    expect(prompt).toContain('Emphasize portable ontology.');
+  });
 });

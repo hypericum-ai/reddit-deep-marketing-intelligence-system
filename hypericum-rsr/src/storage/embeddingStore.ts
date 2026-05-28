@@ -25,6 +25,10 @@ export async function getEmbedding(
   return JSON.parse(raw) as number[];
 }
 
+export async function deleteEmbedding(contentId: string): Promise<void> {
+  await redis.del(embeddingKey(contentId));
+}
+
 export async function getEmbeddings(
   contentIds: string[]
 ): Promise<Map<string, number[]>> {

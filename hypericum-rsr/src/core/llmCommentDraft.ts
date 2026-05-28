@@ -19,7 +19,51 @@ const MAX_DRAFT_ATTEMPTS = 2;
 
 const VALID_RELEVANCE = new Set<HypericumRelevance>(['direct', 'partial', 'none']);
 
-function buildPrompt(signal: Signal, insight: LLMInsight, retryNote = ''): string {
+export type CommentDraftPromptOptions = {
+  retryNote?: string;
+  additionalContext?: string;
+  previousDraft?: string;
+};
+
+function buildRegenerationSection(options: CommentDraftPromptOptions): string {
+  const previous = options.previousDraft?.trim();
+  const extra = options.additionalContext?.trim();
+  if (!previous && !extra) {
+    return '';
+  }
+
+  const lines = [
+    '',
+    '---',
+    'REVIEWER REGENERATION REQUEST',
+    'The review team asked for a new draft using the same thread and insight context.',
+  ];
+
+  if (previous) {
+    lines.push(
+      '',
+      'Previous draft (reference only — write a fresh version; do not copy verbatim unless it is still the best answer):',
+      previous
+    );
+  }
+
+  if (extra) {
+    lines.push('', 'Additional reviewer context (incorporate when relevant):', extra);
+  }
+
+  lines.push(
+    '',
+    'Regenerate the draft using all context above. Respond with the same JSON schema.'
+  );
+
+  return lines.join('\n');
+}
+
+function buildPrompt(
+  signal: Signal,
+  insight: LLMInsight,
+  options: CommentDraftPromptOptions = {}
+): string {
   const title = signal.title ?? '';
   const body = signal.text.slice(0, 2000);
   const subreddit = signal.subreddit;
@@ -35,7 +79,19 @@ function buildPrompt(signal: Signal, insight: LLMInsight, retryNote = ''): strin
     .replace('{{URGENCY}}', insight.urgency)
     .replace('{{HYPERICUM_DOMAIN}}', insight.hypericumDomain);
 
-  return retryNote ? `${base}\n\n${retryNote}` : base;
+  const regeneration = buildRegenerationSection(options);
+  const retryNote = options.retryNote?.trim();
+
+  if (retryNote && regeneration) {
+    return `${base}${regeneration}\n\n${retryNote}`;
+  }
+  if (retryNote) {
+    return `${base}\n\n${retryNote}`;
+  }
+  if (regeneration) {
+    return `${base}${regeneration}`;
+  }
+  return base;
 }
 
 type GeminiPart = { text?: string; thought?: boolean };
@@ -215,13 +271,14 @@ async function callGemini(prompt: string, apiKey: string): Promise<string> {
 export async function draftComment(
   signal: Signal,
   insight: LLMInsight,
-  apiKey: string
+  apiKey: string,
+  promptOptions: Omit<CommentDraftPromptOptions, 'retryNote'> = {}
 ): Promise<CommentDraft> {
   let retryWords = 0;
 
   for (let attempt = 0; attempt < MAX_DRAFT_ATTEMPTS; attempt++) {
     const retryNote = attempt > 0 ? wordCountRetryNote(retryWords) : '';
-    const prompt = buildPrompt(signal, insight, retryNote);
+    const prompt = buildPrompt(signal, insight, { ...promptOptions, retryNote });
 
     try {
       const text = await callGemini(prompt, apiKey);

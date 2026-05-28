@@ -12,7 +12,7 @@ Devvit-native app that captures post and comment events, scores marketing intent
 - Similar post detection (heuristic + Gemini semantic embeddings) with reply redirector
 - **LLM Call 1** — insight extraction + `problem_domain` mapping (score ≥ 30)
 - **LLM Call 2** — 60–100 word comment drafts for on-domain high-intent posts (score ≥ 70)
-- Reviewer dashboard custom post with redirect banner, relevance filters, and copy-draft actions
+- Reviewer dashboard custom post with redirect banner, relevance filters, copy-draft, and regenerate-draft actions
 - Mod tools: dashboard sync, signal dump, stale LLM purge, subreddit monitor, engagement scan
 
 ## Commands
@@ -61,7 +61,7 @@ See [../docs/devvit_architecture.md](../docs/devvit_architecture.md) for the ful
 
 1. `npm run dev` and open `r/hypericum_rsr_dev`
 2. Set **Gemini API Key** in mod settings; leave monitor subs empty for clean eval
-3. Mod menu → **RSR: Purge stale LLM data** to clear old drafts/insights
+3. Mod menu → **RSR: Reset dev subreddit** to remove your posts and wipe the queue (dev only)
 4. `npm run preview-test-post` → post title/body to the subreddit
 5. Open reviewer dashboard → **Refresh**
 6. Mod menu → **Dump signals to log** → `npm run export`
