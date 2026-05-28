@@ -36,8 +36,20 @@ export type DashboardSlimItem = {
     similarityScore?: number;
   };
   queueStatus: 'active' | 'redirected';
-  redirectTo?: { title?: string; contentId: string; matchReason?: string };
+  redirectTo?: {
+    title?: string;
+    contentId: string;
+    matchReason?: string;
+    permalink?: string;
+  };
   replyUrl?: string;
+  similarPosts?: Array<{
+    contentId: string;
+    title?: string;
+    permalink?: string;
+    similarityScore: number;
+    matchReason: string;
+  }>;
 };
 
 const MAX_DASHBOARD_ITEMS = 25;
@@ -173,7 +185,21 @@ export function slimDashboardItems(
               ...(item.redirectTo.matchReason !== undefined
                 ? { matchReason: item.redirectTo.matchReason }
                 : {}),
+              ...(item.redirectTo.permalink !== undefined
+                ? { permalink: item.redirectTo.permalink }
+                : {}),
             },
+          }
+        : {}),
+      ...(item.similarPosts.length > 0
+        ? {
+            similarPosts: item.similarPosts.slice(0, 4).map((match) => ({
+              contentId: match.contentId,
+              similarityScore: match.similarityScore,
+              matchReason: match.matchReason,
+              ...(match.title !== undefined ? { title: match.title } : {}),
+              ...(match.permalink !== undefined ? { permalink: match.permalink } : {}),
+            })),
           }
         : {}),
       replyUrl: resolveThreadUrl(item),

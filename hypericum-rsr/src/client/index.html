@@ -15,8 +15,10 @@
             document.documentElement.setAttribute('data-theme', 'light');
           }
           var viewport = localStorage.getItem('rsr-dash-viewport');
-          if (viewport === 'mobile' || viewport === 'desktop' || viewport === 'wide') {
+          if (viewport === 'mobile' || viewport === 'desktop') {
             document.documentElement.setAttribute('data-viewport', viewport);
+          } else if (viewport === 'wide') {
+            document.documentElement.setAttribute('data-viewport', 'desktop');
           }
         } catch (_err) {
           /* ignore storage errors in webview */
@@ -63,6 +65,7 @@
       body {
         margin: 0;
         min-height: 100%;
+        overflow-x: clip;
         font-family: Inter, system-ui, -apple-system, sans-serif;
         background: var(--bg);
         color: var(--text);
@@ -82,20 +85,24 @@
         transition: max-width 0.2s ease;
       }
       [data-viewport='mobile'] .wrap {
-        max-width: 390px;
+        width: min(390px, calc(100% - 24px));
+        max-width: min(390px, calc(100% - 24px));
         margin: 12px auto;
         border: 1px solid var(--border);
         border-radius: 18px;
         box-shadow: var(--shadow);
       }
-      [data-viewport='wide'] .wrap {
-        max-width: min(1400px, 100%);
-      }
-      :fullscreen .wrap,
-      html.is-fullscreen .wrap {
+      html[data-expanded='true'] .wrap {
+        width: 100%;
         max-width: 100%;
         min-height: 100vh;
-        padding: 24px 32px;
+        margin: 0;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 20px 24px;
+        padding-left: max(24px, env(safe-area-inset-left));
+        padding-right: max(24px, env(safe-area-inset-right));
       }
       header {
         display: flex;
@@ -297,18 +304,14 @@
         flex-direction: column;
         gap: 14px;
       }
-      [data-viewport='wide'] #list {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
-        gap: 14px;
-        align-items: start;
-      }
       .card {
         background: var(--panel);
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 16px;
         box-shadow: var(--shadow);
+        min-width: 0;
+        overflow-wrap: anywhere;
       }
       .card.redirected {
         border-color: var(--warn);
@@ -322,6 +325,37 @@
         margin-bottom: 12px;
         line-height: 1.45;
         font-size: 0.92rem;
+        overflow-wrap: anywhere;
+        overflow: hidden;
+      }
+      .banner-lead {
+        margin: 0 0 6px;
+      }
+      .banner-note {
+        margin: 6px 0 0;
+        font-size: 0.85rem;
+        opacity: 0.95;
+      }
+      .banner-thread-link {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--warn-text);
+        font: inherit;
+        font-weight: 600;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        text-align: left;
+        text-decoration: underline;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        cursor: pointer;
+        min-height: unset;
       }
       .meta {
         display: flex;
@@ -331,6 +365,55 @@
         font-size: 0.9rem;
         margin-bottom: 10px;
         line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+      .subreddit-badge {
+        display: inline-block;
+        padding: 1px 7px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-size: 0.78rem;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .related-threads {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .related-thread {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .related-thread-link {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--link);
+        font: inherit;
+        font-weight: 600;
+        text-align: left;
+        text-decoration: underline;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        cursor: pointer;
+        min-height: unset;
+      }
+      .related-thread-meta {
+        color: var(--muted);
+        font-size: 0.8rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
       }
       .title {
         font-size: clamp(1rem, 2vw, 1.05rem);
@@ -639,10 +722,9 @@
         text-decoration: underline;
         min-height: unset;
       }
-      .banner .thread-link {
-        color: var(--warn-text);
-        font-weight: 600;
-        text-decoration: underline;
+      [data-viewport='mobile'] .meta .pill {
+        flex: 1 1 100%;
+        max-width: 100%;
       }
       @media (max-width: 720px) {
         .wrap {
@@ -674,9 +756,6 @@
         .meta {
           font-size: 0.82rem;
         }
-        [data-viewport='wide'] #list {
-          grid-template-columns: 1fr;
-        }
       }
       @media (min-width: 721px) {
         .actions .action-btn {
@@ -686,6 +765,9 @@
       @media (min-width: 1200px) {
         [data-viewport='desktop'] .wrap {
           max-width: 1040px;
+        }
+        html[data-expanded='true'] .wrap {
+          max-width: 100%;
         }
       }
     </style>
@@ -708,8 +790,7 @@
               <select id="screenSelect" aria-label="Screen size">
                 <option value="mobile">Mobile</option>
                 <option value="desktop" selected>Desktop</option>
-                <option value="wide">Wide</option>
-                <option value="fullscreen">Full screen</option>
+                <option value="fullscreen">Expand view</option>
               </select>
             </label>
           </div>

@@ -1,4 +1,5 @@
 import { EffectType } from '@devvit/protos/json/devvit/ui/effects/v1alpha/effect.js';
+import { WebViewImmersiveMode } from '@devvit/protos/json/devvit/ui/effects/web_view/v1alpha/immersive_mode.js';
 import { ToastAppearance } from '@devvit/protos/json/devvit/ui/toast/toast.js';
 import { emitEffect } from '@devvit/shared-types/client/emit-effect.js';
 
@@ -22,8 +23,22 @@ type QueueItem = {
     similarityScore?: number;
   };
   queueStatus: 'active' | 'redirected';
-  redirectTo?: { title?: string; contentId: string; matchReason?: string };
+  redirectTo?: {
+    title?: string;
+    contentId: string;
+    matchReason?: string;
+    permalink?: string;
+  };
   replyUrl?: string;
+  similarPosts?: SimilarPostRef[];
+};
+
+type SimilarPostRef = {
+  contentId: string;
+  title?: string;
+  permalink?: string;
+  similarityScore: number;
+  matchReason: string;
 };
 
 type DashboardPostData = {
@@ -94,7 +109,9 @@ const DRAFT_PREVIEW_LINES = 4;
 const DRAFT_PREVIEW_MIN_CHARS = 200;
 
 type ThemeMode = 'dark' | 'light';
-type ViewportMode = 'mobile' | 'desktop' | 'wide';
+type ViewportMode = 'mobile' | 'desktop';
+
+let lastTrustedClick: MouseEvent | null = null;
 
 const SUN_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>`;
 const MOON_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" class="moon-icon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
@@ -106,7 +123,7 @@ const state = {
   items: [] as QueueItem[],
   theme: 'dark' as ThemeMode,
   viewport: 'desktop' as ViewportMode,
-  fullscreen: false,
+  expandedLayoutActive: false,
   bootstrapped: false,
   expandedDrafts: new Set<string>(),
   regenerating: new Set<string>(),
@@ -134,6 +151,34 @@ function escapeHtml(value: string): string {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+function subredditFromPermalink(permalink?: string): string | undefined {
+  if (!permalink) {
+    return undefined;
+  }
+  const match = permalink.match(/\/r\/([^/]+)\//i);
+  return match?.[1];
+}
+
+function redditUrlFromPermalink(permalink?: string): string | undefined {
+  if (!permalink) {
+    return undefined;
+  }
+  return permalink.startsWith('http')
+    ? permalink
+    : `https://www.reddit.com${permalink}`;
+}
+
+function subredditFromUrl(url?: string): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+  try {
+    return subredditFromPermalink(new URL(url).pathname);
+  } catch {
+    return subredditFromPermalink(url);
+  }
 }
 
 function threadUrlForHit(hit: SearchHit): string {
@@ -526,8 +571,14 @@ function threadUrl(item: QueueItem): string {
   return `https://www.reddit.com/r/${item.signal.subreddit}/comments/${bareId}/`;
 }
 
-function threadLink(label: string, url: string): string {
-  return `<button type="button" class="thread-link action-btn" data-thread-url="${escapeHtml(url)}">${escapeHtml(label)}</button>`;
+function threadLink(
+  label: string,
+  url: string,
+  variant: 'default' | 'banner' = 'default'
+): string {
+  const className =
+    variant === 'banner' ? 'thread-link banner-thread-link' : 'thread-link action-btn';
+  return `<button type="button" class="${className}" data-thread-url="${escapeHtml(url)}">${escapeHtml(label)}</button>`;
 }
 
 function openThread(url: string): void {
@@ -746,18 +797,52 @@ function toggleDraftExpanded(contentId: string, expand: boolean): void {
   renderList();
 }
 
+function renderSimilarThreadsBlock(
+  item: QueueItem,
+  similarPosts: SimilarPostRef[]
+): string {
+  const matches = similarPosts
+    .filter((match) => match.contentId !== item.signal.contentId)
+    .slice(0, 4);
+  if (matches.length === 0) {
+    return '';
+  }
+
+  const rows = matches
+    .map((match) => {
+      const title = match.title || match.contentId;
+      const url =
+        redditUrlFromPermalink(match.permalink) ??
+        `https://www.reddit.com/search/?q=${encodeURIComponent(title)}`;
+      const subreddit = subredditFromPermalink(match.permalink);
+      const subLabel = subreddit ? `r/${subreddit}` : 'related thread';
+      const score = Math.round(match.similarityScore * 100);
+      return `<li class="related-thread">
+        <button type="button" class="thread-link related-thread-link" data-thread-url="${escapeHtml(url)}">${escapeHtml(title)}</button>
+        <span class="related-thread-meta">${escapeHtml(subLabel)} · ${score}% · ${escapeHtml(match.matchReason)}</span>
+      </li>`;
+    })
+    .join('');
+
+  return `<div class="section-label">Related threads</div>
+    <ul class="related-threads">${rows}</ul>`;
+}
+
 function renderItem(item: QueueItem): string {
   const signal = item.signal;
   const title = signal.title || signal.contentId;
   const redirected = item.queueStatus === 'redirected';
   const url = threadUrl(item);
   const redirectTitle = item.redirectTo?.title || item.redirectTo?.contentId;
+  const canonicalSubreddit =
+    subredditFromPermalink(item.redirectTo?.permalink) ??
+    subredditFromUrl(item.replyUrl);
 
   const banner = redirected
     ? `<div class="banner">
-        Reply on the existing thread instead:
-        ${threadLink(redirectTitle || 'Open canonical thread', url)}
-        (${escapeHtml(item.redirectTo?.matchReason || 'similar post')})
+        <p class="banner-lead">Reply on the existing thread instead:</p>
+        ${threadLink(redirectTitle || 'Open canonical thread', url, 'banner')}
+        <p class="banner-note">${canonicalSubreddit ? `r/${escapeHtml(canonicalSubreddit)} · ` : ''}${escapeHtml(item.redirectTo?.matchReason || 'similar post')}</p>
       </div>`
     : '';
 
@@ -792,11 +877,16 @@ function renderItem(item: QueueItem): string {
     ? `<button type="button" class="action-btn${regenBusy ? ' is-busy' : ''}" data-regen-draft="${escapeHtml(item.signal.contentId)}"${regenBusy ? ' disabled' : ''}>${regenBusy ? 'Regenerating…' : 'Regenerate draft'}</button>`
     : '';
 
+  const similarBlock =
+    !redirected && item.similarPosts && item.similarPosts.length > 0
+      ? renderSimilarThreadsBlock(item, item.similarPosts)
+      : '';
+
   return `<article class="card ${redirected ? 'redirected' : ''}" data-queue-item="${escapeHtml(item.signal.contentId)}">
     ${banner}
     <div class="meta">
-      r/${escapeHtml(signal.subreddit)}
-      · score ${signal.intent.score}
+      <span class="subreddit-badge">r/${escapeHtml(signal.subreddit)}</span>
+      score ${signal.intent.score}
       · ${escapeHtml(signal.clusters.join(', '))}
       ${relevance}
       ${engagement}
@@ -804,6 +894,7 @@ function renderItem(item: QueueItem): string {
     <h2 class="title">${escapeHtml(title)}</h2>
     ${insightBlock}
     ${draftBlock}
+    ${similarBlock}
     <div class="actions">
       ${threadLink('Open thread', url)}
       ${copyBtn}
@@ -826,14 +917,22 @@ function renderList(): void {
       ? visible.map(renderItem).join('')
       : '<div class="empty">No review items match the current filters. Post a qualifying thread, then Sync or Refresh.</div>';
 
-  stats.textContent = `${visible.length} item(s) in queue`;
+  stats.textContent = `${visible.length} item(s) in queue${queueSubredditSummary(visible)}`;
   const loadMode = state.bootstrapped ? 'Loaded from post snapshot.' : 'Loaded live.';
   const updateHint = state.bootstrapped
     ? 'Use Refresh, or post ⋮ → RSR: Sync Dashboard, then reload.'
     : 'Click Refresh to update queue and engagement badges.';
   hint.textContent = state.items.length
-    ? `Queue for r/${state.subreddit}. ${loadMode} ${updateHint}`
+    ? `Home sub r/${state.subreddit} plus monitored subs. Each card is one thread — orange banners mark same-sub duplicates. Search (🔍) finds similar threads across all stored subs. ${loadMode} ${updateHint}`
     : `Queue for r/${state.subreddit}. Empty — post a qualifying thread, then Refresh.`;
+}
+
+function queueSubredditSummary(items: QueueItem[]): string {
+  const subreddits = new Set(items.map((item) => item.signal.subreddit));
+  if (subreddits.size <= 1) {
+    return '';
+  }
+  return ` across ${subreddits.size} subreddits`;
 }
 
 function setStatus(message: string, isError = false): void {
@@ -950,20 +1049,55 @@ function readStoredTheme(): ThemeMode {
     : 'dark';
 }
 
+function readWebViewMode(): 'inline' | 'expanded' {
+  const devvit = (globalThis as { devvit?: { webViewMode?: number } }).devvit;
+  if (devvit?.webViewMode === WebViewImmersiveMode.IMMERSIVE_MODE) {
+    return 'expanded';
+  }
+  return 'inline';
+}
+
+function requestDevvitExpandedMode(click: MouseEvent): void {
+  if (!click.isTrusted || click.type !== 'click') {
+    throw new Error('Untrusted event');
+  }
+  emitEffect({
+    type: EffectType.EFFECT_WEB_VIEW,
+    immersiveMode: { immersiveMode: WebViewImmersiveMode.IMMERSIVE_MODE },
+  });
+}
+
+function exitDevvitExpandedMode(click: MouseEvent): void {
+  if (!click.isTrusted || click.type !== 'click') {
+    throw new Error('Untrusted event');
+  }
+  emitEffect({
+    type: EffectType.EFFECT_WEB_VIEW,
+    immersiveMode: { immersiveMode: WebViewImmersiveMode.INLINE_MODE },
+  });
+}
+
 function readStoredViewport(): ViewportMode {
   try {
     const stored = localStorage.getItem(VIEWPORT_STORAGE_KEY);
-    if (stored === 'mobile' || stored === 'desktop' || stored === 'wide') {
+    if (stored === 'mobile' || stored === 'desktop') {
       return stored;
+    }
+    if (stored === 'wide') {
+      return 'desktop';
     }
     const legacy = localStorage.getItem('rsr-dash-layout');
     if (legacy === 'wide') {
-      return 'wide';
+      return 'desktop';
     }
   } catch {
     /* ignore */
   }
   return 'desktop';
+}
+
+function isExpandedView(): boolean {
+  return readWebViewMode() === 'expanded';
 }
 
 function applyTheme(theme: ThemeMode): void {
@@ -1004,36 +1138,70 @@ function syncScreenSelect(): void {
   if (!screenSelect) {
     return;
   }
-  const value = state.fullscreen ? 'fullscreen' : state.viewport;
+  const value = isExpandedLayout() ? 'fullscreen' : state.viewport;
   if (screenSelect.value !== value) {
     screenSelect.value = value;
   }
 }
 
-function syncFullscreenUi(active: boolean): void {
-  state.fullscreen = active;
-  document.documentElement.classList.toggle('is-fullscreen', active);
+function isExpandedLayout(): boolean {
+  return isExpandedView() || state.expandedLayoutActive;
+}
+
+function syncExpandedLayout(): void {
+  if (!isExpandedView()) {
+    state.expandedLayoutActive = false;
+  }
+  document.documentElement.toggleAttribute(
+    'data-expanded',
+    isExpandedLayout()
+  );
   syncScreenSelect();
 }
 
 async function onScreenChange(value: string): Promise<void> {
   if (value === 'fullscreen') {
-    if (!document.fullscreenElement && !state.fullscreen) {
-      await toggleFullscreen();
-    } else {
-      syncFullscreenUi(true);
+    if (isExpandedLayout()) {
+      syncExpandedLayout();
+      return;
+    }
+
+    const click = lastTrustedClick;
+    if (!click) {
+      showToast('Could not expand — try again', false);
+      syncScreenSelect();
+      return;
+    }
+
+    try {
+      requestDevvitExpandedMode(click);
+      state.expandedLayoutActive = true;
+      syncExpandedLayout();
+      showToast('Expanded to full screen', true);
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message.includes('already expanded')
+          ? 'Already in full screen'
+          : 'Full screen unavailable here';
+      showToast(message, false);
+      syncScreenSelect();
     }
     return;
   }
 
-  if (document.fullscreenElement) {
-    try {
-      await document.exitFullscreen();
-    } catch {
-      /* ignore */
+  if (isExpandedView()) {
+    const click = lastTrustedClick;
+    if (click) {
+      try {
+        exitDevvitExpandedMode(click);
+      } catch {
+        /* ignore */
+      }
     }
+    state.expandedLayoutActive = false;
+    syncExpandedLayout();
   }
-  syncFullscreenUi(false);
+
   applyViewport(value as ViewportMode);
 }
 
@@ -1041,43 +1209,32 @@ function toggleTheme(): void {
   applyTheme(state.theme === 'dark' ? 'light' : 'dark');
 }
 
-async function toggleFullscreen(): Promise<void> {
-  const root = document.documentElement;
-
-  try {
-    if (document.fullscreenElement) {
-      await document.exitFullscreen();
-      return;
-    }
-
-    if (root.requestFullscreen) {
-      await root.requestFullscreen();
-      return;
-    }
-
-    syncFullscreenUi(!state.fullscreen);
-    showToast(
-      state.fullscreen ? 'Expanded to full width' : 'Exited expanded view',
-      true
-    );
-  } catch {
-    syncFullscreenUi(!state.fullscreen);
-    showToast(
-      state.fullscreen
-        ? 'Expanded view enabled (native full screen unavailable)'
-        : 'Exited expanded view',
-      true
-    );
-  }
-}
-
 function initDisplayPreferences(): void {
   applyTheme(readStoredTheme());
   applyViewport(readStoredViewport());
-  syncFullscreenUi(Boolean(document.fullscreenElement));
+  syncExpandedLayout();
 
-  document.addEventListener('fullscreenchange', () => {
-    syncFullscreenUi(Boolean(document.fullscreenElement));
+  document.addEventListener(
+    'click',
+    (event) => {
+      if (event.isTrusted) {
+        lastTrustedClick = event;
+      }
+    },
+    true
+  );
+
+  window.addEventListener('focus', () => {
+    syncExpandedLayout();
+  });
+
+  window.addEventListener('message', (event) => {
+    if (event.data?.type !== 'devvit-message') {
+      return;
+    }
+    if (event.data?.data?.immersiveModeEvent) {
+      syncExpandedLayout();
+    }
   });
 }
 
