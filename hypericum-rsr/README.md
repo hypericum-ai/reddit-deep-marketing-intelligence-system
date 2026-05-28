@@ -57,6 +57,20 @@ scripts/            sync-prompts, save-export, preview-test-post
 
 See [../docs/devvit_architecture.md](../docs/devvit_architecture.md) for the full system design.
 
+## Setup from scratch
+
+See the [root README](../README.md) for SSH clone, Node requirements, and `./scripts/setup.sh`.
+
+Quick path:
+
+```bash
+cd hypericum-rsr
+nvm use          # optional; requires Node >= 22.2.0 (.nvmrc)
+npm ci
+npm run login
+npm run dev
+```
+
 ## Local eval workflow
 
 1. `npm run dev` and open `r/hypericum_rsr_dev`

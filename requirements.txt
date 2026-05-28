@@ -1,0 +1,57 @@
+# Reddit Signal Radar (RSR) — requirements manifest
+#
+# After a fresh git clone, install everything with:
+#
+#   bash scripts/install-requirements.sh
+#
+# Full setup (install + tests):
+#
+#   bash scripts/setup.sh
+#
+# ---------------------------------------------------------------------------
+# SYSTEM (install on the host before npm ci)
+# ---------------------------------------------------------------------------
+# git                    any recent version
+# nodejs                 >= 22.2.0  (see hypericum-rsr/.nvmrc)
+# npm                    bundled with Node.js
+#
+# Ubuntu/Debian example:
+#   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+#   sudo apt install -y git nodejs
+#
+# nvm example (recommended):
+#   cd hypericum-rsr && nvm install && nvm use
+#
+# ---------------------------------------------------------------------------
+# RUNTIME SECRETS (not installed from this file)
+# ---------------------------------------------------------------------------
+# Gemini API key  ->  Reddit mod settings (Hypericum RSR app), not .env
+# Devvit login    ->  cd hypericum-rsr && npm run login  (one-time)
+#
+# ---------------------------------------------------------------------------
+# NODE PACKAGES — source of truth: hypericum-rsr/package-lock.json
+# Installed automatically by scripts/install-requirements.sh via: npm ci
+# ---------------------------------------------------------------------------
+
+# --- production dependencies (hypericum-rsr/package.json) ---
+@devvit/start==0.12.23
+@devvit/web==0.12.23
+@hono/node-server>=1.19.9
+devvit==0.12.23
+hono==4.11.7
+
+# --- dev dependencies (hypericum-rsr/package.json) ---
+@eslint/js==9.39.2
+@types/node>=22.19.7
+eslint==9.39.2
+globals==17.2.0
+prettier==3.8.1
+typescript==5.9.3
+typescript-eslint==8.54.0
+vite==7.3.1
+vitest>=3.2.4
+
+# ---------------------------------------------------------------------------
+# LEGACY (optional — not used by hypericum-rsr Devvit app)
+# ---------------------------------------------------------------------------
+# pip install -r legacy/ingestion/requirements.txt
